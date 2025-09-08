@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <script src="Instructions%20de%20Saut%20NASM%20-%20Fiche%20Compl%C3%A8te_files/html-to-image.min.js" integrity="sha512-iZ2ORl595Wx6miw+GuadDet4WQbdSWS3JLMoNfY8cRGoEFy6oT3G9IbcrBeL6AfkgpA51ETt/faX6yLV+/gFJg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script>
+      (function() {
+        const originalConsole = window.console;
+        window.console = {
+          log: (...args) => {
+            originalConsole.log(...args);
+            window.parent.postMessage({ type: 'console', message: args.join(' ') }, '*');
+          },
+          error: (...args) => {
+            originalConsole.error(...args);
+            window.parent.postMessage({ type: 'console', message: 'Error: ' + args.join(' ') }, '*');
+          },
+          warn: (...args) => {
+            originalConsole.warn(...args);
+            window.parent.postMessage({ type: 'console', message: 'Warning: ' + args.join(' ') }, '*');
+          }
+        };
+
+        let requestId = 0;
+        let callbacksMap = new Map();
+        window.claude = {
+          complete: (prompt) => {
+            return new Promise((resolve, reject) => {
+              const id = requestId++;
+              callbacksMap.set(id, { resolve, reject });
+              window.parent.postMessage({ type: 'claudeComplete', id, prompt }, '*');
+            });
+          }
+        };
+
+        let pendingBlobs = new Map();
+        URL.createObjectURL = (blob) => {
+          // Store the blob and create an ID and URL for it
+          const blobId = `blob-${Date.now()}-${Math.random()}`;
+          pendingBlobs.set(blobId, blob);
+          return `blob-request://${blobId}`;
+        };
+
+        URL.revokeObjectURL = (url) => {
+          // Remove the blob from our store
+          const blobId = url.replace("blob-request://", "");
+          pendingBlobs.delete(blobId);
+        };
+
+        const getBlobFromURL = (url) => {
+          const blobId = url.replace("blob-request://", "");
+          return pendingBlobs.get(blobId);
+        };
+
+        // Override global fetch
+        window.fetch = (url, init = {}) => {
+          return new Promise((resolve, reject) => {
+            const id = requestId++;
+            callbacksMap.set(id, { resolve, reject });
+            window.parent.postMessage({
+              type: 'proxyFetch',
+              id,
+              url,
+              init,
+            }, '*');
+          });
+        };
+
+        window.addEventListener('message', async (event) => {
+          if (event.data.type === 'takeScreenshot') {
+            const rootElement = document.getElementById('artifacts-component-root-html');
+            if (!rootElement) {
+              window.parent.postMessage({
+                type: 'screenshotError',
+                error: new Error('Root element not found'),
+              }, '*');
+            }
+            const screenshot = await htmlToImage.toPng(rootElement, {
+              imagePlaceholder:
+                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUGFdjePDgwX8ACOQDoNsk0PMAAAAASUVORK5CYII=",
+            });
+            window.parent.postMessage({
+              type: 'screenshotData',
+              data: screenshot,
+            }, '*');
+          } else if (event.data.type === 'claudeComplete') {
+            const callback = callbacksMap.get(event.data.id);
+            if (event.data.error) {
+              callback.reject(new Error(event.data.error));
+            } else {
+              callback.resolve(event.data.completion);
+            }
+            callbacksMap.delete(event.data.id);
+          } else if (event.data.type === 'proxyFetchResponse') {
+            const callback = callbacksMap.get(event.data.id);
+            if (event.data.error) {
+              callback.reject(new Error(event.data.error));
+            } else {
+              callback.resolve(new Response(event.data.body, {
+                status: event.data.status,
+                statusText: event.data.statusText,
+                headers: event.data.headers
+              }));
+            }
+            callbacksMap.delete(event.data.id);
+          }
+        });
+
+        window.addEventListener('click', (event) => {
+          const isEl = event.target instanceof HTMLElement;
+          if (!isEl) return;
+    
+          // find ancestor links
+          const linkEl = event.target.closest("a");
+          if (!linkEl || !linkEl.href) return;
+    
+          event.preventDefault();
+          event.stopImmediatePropagation();
+    
+          if (linkEl.href.startsWith("blob-request:")) {
+            const blob = getBlobFromURL(linkEl.href);
+            if (!blob) return;
+            void blob.arrayBuffer().then((data) => {
+              window.parent.postMessage({
+                type: "downloadFile",
+                filename: linkEl.download,
+                data,
+                mimeType: blob.type || "application/octet-stream",
+              });
+            });
+          } else if (linkEl.href.startsWith("data:")) {
+            const [header, base64Data] = linkEl.href.split(",");
+            const mimeMatch = header.match(/data:([^;]+)/);
+            const mimeType = mimeMatch ? mimeMatch[1] : "application/octet-stream";
+            const binaryString = atob(base64Data);
+            const data = Uint8Array.from(binaryString, (c) =>
+              c.charCodeAt(0),
+            ).buffer;
+            window.parent.postMessage({
+              type: "downloadFile",
+              filename: linkEl.download,
+              data,
+              mimeType,
+            });
+          } else {
+            let linkUrl;
+            try {
+              linkUrl = new URL(linkEl.href);
+            } catch (error) {
+              return;
+            }
+    
+            if (linkUrl.hostname === window.location.hostname) return;
+      
+            window.parent.postMessage({
+              type: 'openExternal',
+              href: linkEl.href,
+            }, '*');
+          }
+      });
+
+        const originalOpen = window.open;
+        window.open = function (url) {
+          window.parent.postMessage({
+            type: "openExternal",
+            href: url,
+          }, "*");
+        };
+
+        window.addEventListener('error', (event) => {
+          window.parent.postMessage({ type: 'console', message: 'Uncaught Error: ' + event.message }, '*');
+        });
+      })();
+    </script>
+  
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instructions de Saut NASM - Fiche Complète</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: #e3e3e3;
+            line-height: 1.6;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: #2c2c54;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+            background: #40407a;
+            border-radius: 12px;
+            padding: 25px;
+            border-left: 5px solid var(--accent-color);
+        }
+        
+        .section h2 {
+            color: var(--accent-color);
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--accent-color);
+        }
+        
+        .jump-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: #2c2c54;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .jump-table th {
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            color: white;
+            padding: 15px 10px;
+            text-align: left;
+            font-weight: bold;
+            font-size: 0.95em;
+        }
+        
+        .jump-table td {
+            padding: 12px 10px;
+            border-bottom: 1px solid #40407a;
+            vertical-align: top;
+        }
+        
+        .jump-table tr:nth-child(even) {
+            background: #353570;
+        }
+        
+        .jump-table tr:hover {
+            background: #4834d4;
+            transition: background 0.3s ease;
+        }
+        
+        .instruction {
+            font-weight: bold;
+            color: #81ecec;
+            font-size: 1.1em;
+        }
+        
+        .condition {
+            color: #fdcb6e;
+            font-size: 0.95em;
+        }
+        
+        .description {
+            color: #b2bec3;
+            font-size: 0.9em;
+        }
+        
+        .example {
+            color: #a29bfe;
+            font-size: 0.85em;
+            font-style: italic;
+        }
+        
+        .flags-section {
+            background: #1a1a2e;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 2px solid #6c5ce7;
+        }
+        
+        .flags-title {
+            color: #6c5ce7;
+            font-size: 1.4em;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .flags-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .flag-card {
+            background: #40407a;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .flag-card:hover {
+            border-color: #6c5ce7;
+            transform: translateY(-2px);
+        }
+        
+        .flag-name {
+            color: #81ecec;
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .flag-bit {
+            color: #fdcb6e;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+        
+        .flag-desc {
+            color: #b2bec3;
+            font-size: 0.85em;
+        }
+        
+        /* Couleurs par catégorie */
+        .unconditional { --accent-color: #fd79a8; }
+        .signed { --accent-color: #00cec9; }
+        .unsigned { --accent-color: #fdcb6e; }
+        .equality { --accent-color: #55a3ff; }
+        .flags { --accent-color: #ff7675; }
+        .special { --accent-color: #a29bfe; }
+        
+        .code-example {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 4px solid var(--accent-color);
+            font-family: 'Courier New', monospace;
+        }
+        
+        .code-example .comment {
+            color: #636e72;
+        }
+        
+        .code-example .keyword {
+            color: #6c5ce7;
+        }
+        
+        .code-example .register {
+            color: #81ecec;
+        }
+        
+        .quick-ref {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 30px 0;
+            border: 2px solid #fd79a8;
+        }
+        
+        .quick-ref h3 {
+            color: #fd79a8;
+            font-size: 1.4em;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .ref-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .ref-item {
+            background: #2c2c54;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        
+        .ref-title {
+            color: #fdcb6e;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .ref-content {
+            color: #b2bec3;
+            font-size: 0.9em;
+        }
+        
+        @media (max-width: 768px) {
+            .jump-table {
+                font-size: 0.8em;
+            }
+            
+            .jump-table th,
+            .jump-table td {
+                padding: 8px 5px;
+            }
+            
+            .flags-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .ref-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body id="artifacts-component-root-html">
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Instructions de Saut NASM</h1>
+            <p>Guide complet des conditions de saut en assembleur x86-64</p>
+        </div>
+        
+        <div class="content">
+            <!-- Registre des Flags -->
+            <div class="flags-section">
+                <div class="flags-title">🏁 Registre RFLAGS - Bits de Condition</div>
+                <div class="flags-grid">
+                    <div class="flag-card">
+                        <div class="flag-name">CF</div>
+                        <div class="flag-bit">Bit 0</div>
+                        <div class="flag-desc">Carry Flag<br>Dépassement non signé</div>
+                    </div>
+                    <div class="flag-card">
+                        <div class="flag-name">ZF</div>
+                        <div class="flag-bit">Bit 6</div>
+                        <div class="flag-desc">Zero Flag<br>Résultat = 0</div>
+                    </div>
+                    <div class="flag-card">
+                        <div class="flag-name">SF</div>
+                        <div class="flag-bit">Bit 7</div>
+                        <div class="flag-desc">Sign Flag<br>Résultat négatif</div>
+                    </div>
+                    <div class="flag-card">
+                        <div class="flag-name">OF</div>
+                        <div class="flag-bit">Bit 11</div>
+                        <div class="flag-desc">Overflow Flag<br>Dépassement signé</div>
+                    </div>
+                    <div class="flag-card">
+                        <div class="flag-name">PF</div>
+                        <div class="flag-bit">Bit 2</div>
+                        <div class="flag-desc">Parity Flag<br>Parité des bits</div>
+                    </div>
+                    <div class="flag-card">
+                        <div class="flag-name">AF</div>
+                        <div class="flag-bit">Bit 4</div>
+                        <div class="flag-desc">Auxiliary Flag<br>Retenue bit 3→4</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Sauts Inconditionnels -->
+            <div class="section unconditional">
+                <h2><div class="icon"></div>Sauts Inconditionnels</h2>
+                <table class="jump-table">
+                    <thead>
+                        <tr>
+                            <th>Instruction</th>
+                            <th>Description</th>
+                            <th>Exemple</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="instruction">JMP</span></td>
+                            <td><span class="description">Saut inconditionnel vers une étiquette</span></td>
+                            <td><span class="example">jmp loop</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">CALL</span></td>
+                            <td><span class="description">Appel de fonction (sauve RIP sur la pile)</span></td>
+                            <td><span class="example">call ft_strlen</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">RET</span></td>
+                            <td><span class="description">Retour de fonction (restaure RIP)</span></td>
+                            <td><span class="example">ret</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Sauts basés sur Égalité/Inégalité -->
+            <div class="section equality">
+                <h2><div class="icon"></div>Sauts basés sur Égalité</h2>
+                <table class="jump-table">
+                    <thead>
+                        <tr>
+                            <th>Instruction</th>
+                            <th>Condition</th>
+                            <th>Flags</th>
+                            <th>Description</th>
+                            <th>Exemple</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="instruction">JE / JZ</span></td>
+                            <td><span class="condition">Égal / Zéro</span></td>
+                            <td>ZF = 1</td>
+                            <td><span class="description">Saut si résultat = 0</span></td>
+                            <td><span class="example">cmp rax, rbx<br>je equal</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">JNE / JNZ</span></td>
+                            <td><span class="condition">Différent / Non-zéro</span></td>
+                            <td>ZF = 0</td>
+                            <td><span class="description">Saut si résultat ≠ 0</span></td>
+                            <td><span class="example">test rax, rax<br>jnz not_zero</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Sauts basés sur Comparaisons Signées -->
+            <div class="section signed">
+                <h2><div class="icon"></div>Sauts basés sur Comparaisons Signées</h2>
+                <table class="jump-table">
+                    <thead>
+                        <tr>
+                            <th>Instruction</th>
+                            <th>Condition</th>
+                            <th>Flags</th>
+                            <th>Description</th>
+                            <th>Exemple</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="instruction">JL / JNGE</span></td>
+                            <td><span class="condition">Inférieur (signé)</span></td>
+                            <td>SF ≠ OF</td>
+                            <td><span class="description">Saut si premier &lt; second</span></td>
+                            <td><span class="example">cmp rax, 0<br>jl negative</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">JLE / JNG</span></td>
+                            <td><span class="condition">Inférieur ou égal</span></td>
+                            <td>ZF=1 ou SF≠OF</td>
+                            <td><span class="description">Saut si premier ≤ second</span></td>
+                            <td><span class="example">cmp rcx, 10<br>jle small</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">JG / JNLE</span></td>
+                            <td><span class="condition">Supérieur (signé)</span></td>
+                            <td>ZF=0 et SF=OF</td>
+                            <td><span class="description">Saut si premier &gt; second</span></td>
+                            <td><span class="example">cmp rdx, 5<br>jg big</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">JGE / JNL</span></td>
+                            <td><span class="condition">Supérieur ou égal</span></td>
+                            <td>SF = OF</td>
+                            <td><span class="description">Saut si premier ≥ second</span></td>
+                            <td><span class="example">cmp rsi, 0<br>jge positive</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Sauts basés sur Comparaisons Non-Signées -->
+            <div class="section unsigned">
+                <h2><div class="icon"></div>Sauts basés sur Comparaisons Non-Signées</h2>
+                <table class="jump-table">
+                    <thead>
+                        <tr>
+                            <th>Instruction</th>
+                            <th>Condition</th>
+                            <th>Flags</th>
+                            <th>Description</th>
+                            <th>Exemple</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="instruction">JB / JC / JNAE</span></td>
+                            <td><span class="condition">Inférieur (non-signé)</span></td>
+                            <td>CF = 1</td>
+                            <td><span class="description">Saut si premier &lt; second</span></td>
+                            <td><span class="example">cmp al, 128<br>jb small_unsigned</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">JBE / JNA</span></td>
+                            <td><span class="condition">Inférieur ou égal</span></td>
+                            <td>CF=1 ou ZF=1</td>
+                            <td><span class="description">Saut si premier ≤ second</span></td>
+                            <td><span class="example">cmp bl, 255<br>jbe max_byte</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">JA / JNBE</span></td>
+                            <td><span class="condition">Supérieur (non-signé)</span></td>
+                            <td>CF=0 et ZF=0</td>
+                            <td><span class="description">Saut si premier &gt; second</span></td>
+                            <td><span class="example">cmp cl, 100<br>ja big_unsigned</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">JAE / JNB / JNC</span></td>
+                            <td><span class="condition">Supérieur ou égal</span></td>
+                            <td>CF = 0</td>
+                            <td><span class="description">Saut si premier ≥ second</span></td>
+                            <td><span class="example">cmp dl, 50<br>jae medium</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Sauts basés sur Flags Individuels -->
+            <div class="section flags">
+                <h2><div class="icon"></div>Sauts basés sur Flags Individuels</h2>
+                <table class="jump-table">
+                    <thead>
+                        <tr>
+                            <th>Instruction</th>
+                            <th>Condition</th>
+                            <th>Flags</th>
+                            <th>Description</th>
+                            <th>Exemple</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="instruction">JC</span></td>
+                            <td><span class="condition">Carry activé</span></td>
+                            <td>CF = 1</td>
+                            <td><span class="description">Erreur syscall macOS/BSD</span></td>
+                            <td><span class="example">syscall<br>jc error</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">JNC</span></td>
+                            <td><span class="condition">Carry désactivé</span></td>
+                            <td>CF = 0</td>
+                            <td><span class="description">Pas d'erreur syscall</span></td>
+                            <td><span class="example">syscall<br>jnc success</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">JS</span></td>
+                            <td><span class="condition">Sign activé</span></td>
+                            <td>SF = 1</td>
+                            <td><span class="description">Résultat négatif</span></td>
+                            <td><span class="example">sub rax, rbx<br>js negative</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">JNS</span></td>
+                            <td><span class="condition">Sign désactivé</span></td>
+                            <td>SF = 0</td>
+                            <td><span class="description">Résultat positif</span></td>
+                            <td><span class="example">add rax, rbx<br>jns positive</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">JO</span></td>
+                            <td><span class="condition">Overflow activé</span></td>
+                            <td>OF = 1</td>
+                            <td><span class="description">Dépassement signé</span></td>
+                            <td><span class="example">add rax, rbx<br>jo overflow</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">JNO</span></td>
+                            <td><span class="condition">Overflow désactivé</span></td>
+                            <td>OF = 0</td>
+                            <td><span class="description">Pas de dépassement</span></td>
+                            <td><span class="example">mul rbx<br>jno ok</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">JP / JPE</span></td>
+                            <td><span class="condition">Parité paire</span></td>
+                            <td>PF = 1</td>
+                            <td><span class="description">Nombre pair de bits à 1</span></td>
+                            <td><span class="example">test al, al<br>jp even_parity</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">JNP / JPO</span></td>
+                            <td><span class="condition">Parité impaire</span></td>
+                            <td>PF = 0</td>
+                            <td><span class="description">Nombre impair de bits à 1</span></td>
+                            <td><span class="example">xor al, bl<br>jnp odd_parity</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Instructions Spéciales -->
+            <div class="section special">
+                <h2><div class="icon"></div>Instructions Spéciales de Boucle</h2>
+                <table class="jump-table">
+                    <thead>
+                        <tr>
+                            <th>Instruction</th>
+                            <th>Condition</th>
+                            <th>Action</th>
+                            <th>Description</th>
+                            <th>Exemple</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="instruction">LOOP</span></td>
+                            <td><span class="condition">RCX ≠ 0</span></td>
+                            <td>RCX--, puis saut</td>
+                            <td><span class="description">Boucle avec compteur</span></td>
+                            <td><span class="example">mov rcx, 10<br>loop_start:<br>; code<br>loop loop_start</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">LOOPE / LOOPZ</span></td>
+                            <td><span class="condition">RCX≠0 et ZF=1</span></td>
+                            <td>RCX--, saut si ZF=1</td>
+                            <td><span class="description">Boucle tant que égal</span></td>
+                            <td><span class="example">loope while_equal</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">LOOPNE / LOOPNZ</span></td>
+                            <td><span class="condition">RCX≠0 et ZF=0</span></td>
+                            <td>RCX--, saut si ZF=0</td>
+                            <td><span class="description">Boucle tant que différent</span></td>
+                            <td><span class="example">loopne while_not_equal</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">JECXZ</span></td>
+                            <td><span class="condition">ECX = 0</span></td>
+                            <td>Saut si ECX=0</td>
+                            <td><span class="description">Saut si compteur vide</span></td>
+                            <td><span class="example">jecxz no_iterations</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="instruction">JRCXZ</span></td>
+                            <td><span class="condition">RCX = 0</span></td>
+                            <td>Saut si RCX=0</td>
+                            <td><span class="description">Version 64-bit de JECXZ</span></td>
+                            <td><span class="example">jrcxz empty_counter</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Guide de Référence Rapide -->
+            <div class="quick-ref">
+                <h3>🚀 Guide de Référence Rapide</h3>
+                <div class="ref-grid">
+                    <div class="ref-item">
+                        <div class="ref-title">🎯 Pour Comparer des Nombres</div>
+                        <div class="ref-content">
+                            <strong>Signés :</strong> JL, JLE, JG, JGE<br>
+                            <strong>Non-signés :</strong> JB, JBE, JA, JAE<br>
+                            <strong>Égalité :</strong> JE/JZ, JNE/JNZ
+                        </div>
+                    </div>
+                    
+                    <div class="ref-item">
+                        <div class="ref-title">🔧 Pour Détecter les Erreurs</div>
+                        <div class="ref-content">
+                            <strong>Linux :</strong> cmp rax, 0 + JL<br>
+                            <strong>macOS/BSD :</strong> JC<br>
+                            <strong>Overflow :</strong> JO/JNO
+                        </div>
+                    </div>
+                    
+                    <div class="ref-item">
+                        <div class="ref-title">🔄 Pour les Boucles</div>
+                        <div class="ref-content">
+                            <strong>Simple :</strong> LOOP<br>
+                            <strong>Conditionnelle :</strong> LOOPE/LOOPNE<br>
+                            <strong>Test initial :</strong> JRCXZ
+                        </div>
+                    </div>
+                    
+                    <div class="ref-item">
+                        <div class="ref-title">⚡ Instructions les Plus Utilisées</div>
+                        <div class="ref-content">
+                            <strong>JMP :</strong> Saut inconditionnel<br>
+                            <strong>JE/JNE :</strong> Test d'égalité<br>
+                            <strong>JL/JG :</strong> Comparaisons signées<br>
+                            <strong>JC/JNC :</strong> Détection d'erreur
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Exemples Pratiques -->
+            <div class="section">
+                <h2 style="color: #fd79a8;"><div class="icon" style="background: #fd79a8;"></div>Exemples Pratiques</h2>
+                
+                <div class="code-example" style="--accent-color: #fd79a8;">
+                    <strong>Exemple 1 : Boucle avec compteur</strong><br><br>
+                    <span class="keyword">mov</span> <span class="register">rcx</span>, 10<br>
+                    loop_start:<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">; Faire quelque chose...</span><br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;<span class="keyword">dec</span> <span class="register">rax</span><br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;<span class="keyword">loop</span> loop_start <span class="comment">; RCX--, saut si RCX≠0</span>
+                </div>
+                
+                <div class="code-example" style="--accent-color: #00cec9;">
+                    <strong>Exemple 2 : Fonction ft_strlen</strong><br><br>
+                    <span class="keyword">mov</span> <span class="register">rax</span>, 0<br>
+                    loop:<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;<span class="keyword">cmp</span> <span class="keyword">byte</span> [<span class="register">rdi</span> + <span class="register">rax</span>], 0<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;<span class="keyword">je</span> exit <span class="comment">; Saut si caractère = 0</span><br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;<span class="keyword">inc</span> <span class="register">rax</span><br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;<span class="keyword">jmp</span> loop<br>
+                    exit:<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;<span class="keyword">ret</span>
+                </div>
+                
+                <div class="code-example" style="--accent-color: #fdcb6e;">
+                    <strong>Exemple 3 : Gestion d'erreur syscall</strong><br><br>
+                    <span class="comment">; Linux</span><br>
+                    <span class="keyword">mov</span> <span class="register">rax</span>, 1 <span class="comment">; sys_write</span><br>
+                    <span class="keyword">syscall</span><br>
+                </div></div></div></div></body></html>
