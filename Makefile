@@ -6,7 +6,7 @@
 #    By: guphilip <guphilip@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/09/08 16:32:45 by guphilip          #+#    #+#              #
-#    Updated: 2025/09/08 16:33:07 by guphilip         ###   ########.fr        #
+#    Updated: 2025/09/08 16:46:59 by guphilip         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -20,7 +20,7 @@ ASMFLAGS = -f elf64
 CC       = cc
 CFLAGS   = -Wall -Wextra -Werror -g
 
-SRCS     = $(SRC_DIR)/ft_strlen.s
+SRCS     = $(SRC_DIR)/ft_strlen.s $(SRC_DIR)/ft_strcpy.s
 OBJS     = $(SRCS:$(SRC_DIR)/%.s=$(OBJ_DIR)/%.o)
 
 TEST_SRC = $(SRC_DIR)/test.c
