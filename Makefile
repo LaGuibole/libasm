@@ -1,30 +1,64 @@
-NAME = libasm.a
-SRC_DIR = srcs/
-OBJ_DIR = objs/
+# **************************************************************************** #
+#                                                                              #
+#                                                         :::      ::::::::    #
+#    Makefile                                           :+:      :+:    :+:    #
+#                                                     +:+ +:+         +:+      #
+#    By: guphilip <guphilip@student.42.fr>          +#+  +:+       +#+         #
+#                                                 +#+#+#+#+#+   +#+            #
+#    Created: 2025/09/08 16:32:45 by guphilip          #+#    #+#              #
+#    Updated: 2025/09/08 16:33:07 by guphilip         ###   ########.fr        #
+#                                                                              #
+# **************************************************************************** #
 
-CC = gcc
-CFLAGS = -Wall -Wextra -Werror -g
+NAME     = libasm.a
+SRC_DIR  = srcs
+OBJ_DIR  = objs
 
-SRCS = test.c
-OBJS = $(patsubst %.c,$(OBJ_DIR)%.o,$(SRCS))
+ASM      = nasm
+ASMFLAGS = -f elf64
+
+CC       = cc
+CFLAGS   = -Wall -Wextra -Werror -g
+
+SRCS     = $(SRC_DIR)/ft_strlen.s
+OBJS     = $(SRCS:$(SRC_DIR)/%.s=$(OBJ_DIR)/%.o)
+
+TEST_SRC = $(SRC_DIR)/test.c
+TEST_OBJ = $(OBJ_DIR)/test.o
+TEST_BIN = run_test
+
+# ----------------------------------------------------------------- #
 
 all: $(NAME)
 
 $(NAME): $(OBJS)
-	@ar rcs $(NAME) $(OBJS)
-	@ranlib $(NAME)
+	@ar rcs $@ $^
+	@ranlib $@
 
-$(OBJ_DIR)%.o : $(SRC_DIR)%.c
+# .s -> .o via NASM
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.s
+	@mkdir -p $(dir $@)
+	@$(ASM) $(ASMFLAGS) -o $@ $<
+
+# .c -> .o via cc
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) -c $< -o $@
 
+# test binary
+$(TEST_BIN): $(TEST_OBJ) $(NAME)
+	@$(CC) $(CFLAGS) -o $@ $(TEST_OBJ) -L. -lasm
+
+test: $(TEST_BIN)
+	@./$(TEST_BIN)
+
 clean:
-	@rm -f $(OBJS)
+	@rm -f $(OBJS) $(TEST_OBJ)
 	@rm -rf $(OBJ_DIR)
 
 fclean: clean
-	@rm -rf $(NAME)
+	@rm -f $(NAME) $(TEST_BIN)
 
 re: fclean all
 
-.PHONY: all clean fclean re
+.PHONY: all clean fclean re test
