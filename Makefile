@@ -3,10 +3,10 @@
 #                                                         :::      ::::::::    #
 #    Makefile                                           :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
-#    By: guillaumephilippe <guillaumephilippe@st    +#+  +:+       +#+         #
+#    By: guphilip <guphilip@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/09/08 16:32:45 by guphilip          #+#    #+#              #
-#    Updated: 2025/09/08 20:23:10 by guillaumeph      ###   ########.fr        #
+#    Updated: 2025/09/09 12:21:11 by guphilip         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -21,7 +21,7 @@ ASMFLAGS_MACOS = -fmacho64
 CC       = cc
 CFLAGS   = -Wall -Wextra -Werror -g
 
-SRCS     = $(SRC_DIR)/ft_strlen.s $(SRC_DIR)/ft_strcpy.s $(SRC_DIR)/ft_strcmp.s
+SRCS     = $(SRC_DIR)/ft_strlen.s $(SRC_DIR)/ft_strcpy.s $(SRC_DIR)/ft_strcmp.s $(SRC_DIR)/ft_write.s $(SRC_DIR)/ft_read.s
 OBJS     = $(SRCS:$(SRC_DIR)/%.s=$(OBJ_DIR)/%.o)
 
 TEST_SRC = $(SRC_DIR)/test.c
