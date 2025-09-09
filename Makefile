@@ -3,10 +3,10 @@
 #                                                         :::      ::::::::    #
 #    Makefile                                           :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
-#    By: guphilip <guphilip@student.42.fr>          +#+  +:+       +#+         #
+#    By: guillaumephilippe <guillaumephilippe@st    +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/09/08 16:32:45 by guphilip          #+#    #+#              #
-#    Updated: 2025/09/08 16:46:59 by guphilip         ###   ########.fr        #
+#    Updated: 2025/09/08 20:23:10 by guillaumeph      ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -15,12 +15,13 @@ SRC_DIR  = srcs
 OBJ_DIR  = objs
 
 ASM      = nasm
-ASMFLAGS = -f elf64
+ASMFLAGS = -felf64
+ASMFLAGS_MACOS = -fmacho64
 
 CC       = cc
 CFLAGS   = -Wall -Wextra -Werror -g
 
-SRCS     = $(SRC_DIR)/ft_strlen.s $(SRC_DIR)/ft_strcpy.s
+SRCS     = $(SRC_DIR)/ft_strlen.s $(SRC_DIR)/ft_strcpy.s $(SRC_DIR)/ft_strcmp.s
 OBJS     = $(SRCS:$(SRC_DIR)/%.s=$(OBJ_DIR)/%.o)
 
 TEST_SRC = $(SRC_DIR)/test.c
@@ -60,5 +61,11 @@ fclean: clean
 	@rm -f $(NAME) $(TEST_BIN)
 
 re: fclean all
+
+mac: ASMFLAGS = -fmacho64
+mac: re
+
+linux: ASMFLAGS = -felf64
+linux: re
 
 .PHONY: all clean fclean re test
