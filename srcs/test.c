@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include "test_helper.c"
 
 int _ft_strlen(char *string);
 char *_ft_strcpy(char *dest, char *src);
@@ -12,12 +13,15 @@ char *_ft_strdup(char *s);
 
 int main(void)
 {
+
+	print_title("FT_STRLEN");
 	char *string = "hello world!";
 	printf("og strlen = %lu\n", strlen(string));
 	printf("asm strlen = %d\n", _ft_strlen(string));
 
 	// --------------------------------------------------------------- //
 
+	print_title("FT_STRCPY");
 	char *og_src = "Hello You! You've succeed at strcpy apparently";
 	char *og_dest = malloc(100);
 	char *asm_dest = malloc(100);
@@ -28,6 +32,7 @@ int main(void)
 
 	// --------------------------------------------------------------- //
 
+	print_title("FT_STRCMP");
 	char *s1 = "hello world";
 	char *s2 = "hello world";
 
@@ -36,6 +41,7 @@ int main(void)
 
 	// --------------------------------------------------------------- //
 
+	print_title("FT_WRITE");
 	int asm_write_ret = _ft_write(1, "asm_write : Hello World!\n", 25);
 	int write_ret = write(1, "og write : Hello World!\n", 25);
 
@@ -44,6 +50,7 @@ int main(void)
 
 	// --------------------------------------------------------------- //
 
+	print_title("FT_READ");
 	char buffer[1024];
 
 	int asm_read_ret = _ft_read(0, buffer, sizeof(buffer));
@@ -54,6 +61,7 @@ int main(void)
 
 	// --------------------------------------------------------------- //
 
+	print_title("FT_STRDUP");
 	char *msg = _ft_strdup("strdup ca marche");
 	printf("_ft_strdup() = %s\n", msg);
 
