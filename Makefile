@@ -6,7 +6,7 @@
 #    By: guphilip <guphilip@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/09/08 16:32:45 by guphilip          #+#    #+#              #
-#    Updated: 2025/09/09 17:00:33 by guphilip         ###   ########.fr        #
+#    Updated: 2025/09/11 14:17:33 by guphilip         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -21,7 +21,7 @@ ASMFLAGS_MACOS = -fmacho64
 CC       = cc
 CFLAGS   = -Wall -Wextra -Werror -g
 
-SRCS     = $(SRC_DIR)/ft_strlen.s $(SRC_DIR)/ft_strcpy.s $(SRC_DIR)/ft_strcmp.s $(SRC_DIR)/ft_write.s $(SRC_DIR)/ft_read.s $(SRC_DIR)/ft_strdup.s
+SRCS     = $(SRC_DIR)/ft_strlen.s $(SRC_DIR)/ft_strcpy.s $(SRC_DIR)/ft_strcmp.s $(SRC_DIR)/ft_write.s $(SRC_DIR)/ft_read.s $(SRC_DIR)/ft_strdup.s $(SRC_DIR)/ft_putstr.s $(SRC_DIR)/ft_atoi_base.s $(SRC_DIR)/ft_strchr.s
 OBJS     = $(SRCS:$(SRC_DIR)/%.s=$(OBJ_DIR)/%.o)
 
 TEST_SRC = $(SRC_DIR)/test.c
