@@ -71,8 +71,8 @@ int main(void)
 	// --------------------------------------------------------------- //
 
 	print_title("FT_ATOI_BASE");
-	_ft_atoi_base("        --01234", "0123456789");
-
+	int atoi_result = _ft_atoi_base("42", "0123456789");
+	printf("_ft_atoi_base() = %d\n", atoi_result);
 
 	return 0;
 }
