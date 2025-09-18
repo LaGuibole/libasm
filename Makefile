@@ -21,7 +21,7 @@ ASMFLAGS_MACOS = -fmacho64
 CC       = cc
 CFLAGS   = -Wall -Wextra -Werror -g
 
-SRCS     = $(SRC_DIR)/ft_strlen.s $(SRC_DIR)/ft_strcpy.s $(SRC_DIR)/ft_strcmp.s $(SRC_DIR)/ft_write.s $(SRC_DIR)/ft_read.s $(SRC_DIR)/ft_strdup.s $(SRC_DIR)/ft_putstr.s $(SRC_DIR)/ft_atoi_base.s $(SRC_DIR)/ft_strchr.s $(SRC_DIR)/atoi.s
+SRCS     = $(SRC_DIR)/ft_strlen.s $(SRC_DIR)/ft_strcpy.s $(SRC_DIR)/ft_strcmp.s $(SRC_DIR)/ft_write.s $(SRC_DIR)/ft_read.s $(SRC_DIR)/ft_strdup.s $(SRC_DIR)/ft_putstr.s $(SRC_DIR)/ft_atoi_base.s $(SRC_DIR)/ft_strchr.s
 OBJS     = $(SRCS:$(SRC_DIR)/%.s=$(OBJ_DIR)/%.o)
 
 TEST_SRC = $(SRC_DIR)/test.c
@@ -44,11 +44,11 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.s
 # .c -> .o via cc
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -c $< -o $@ 
 
 # test binary
 $(TEST_BIN): $(TEST_OBJ) $(NAME)
-	@$(CC) $(CFLAGS) -o $@ $(TEST_OBJ) -L. -lasm
+	@$(CC) $(CFLAGS) -o $@ $(TEST_OBJ) -L. -lasm -no-pie
 
 test: $(TEST_BIN)
 	@./$(TEST_BIN)
