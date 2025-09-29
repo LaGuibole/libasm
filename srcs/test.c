@@ -22,6 +22,8 @@ t_list *ft_list_new(void *data);
 void ft_list_push_front(t_list **begin_list, void *data);
 int	ft_list_size(t_list *begin_list);
 
+void print_int(void *p) { printf("%d", *(int *)p); }
+void print_str(void *p) { printf("\"%s\"", (char *)p); }
 int *box_int(int nb)
 {
     int *p = malloc(sizeof *p);
@@ -33,18 +35,26 @@ int *box_int(int nb)
     *p = nb;
     return p;
 }
-
 void free_list_int(t_list *lst)
 {
-    while (lst)
+	while (lst)
     {
-        t_list *nb = lst->next;
+		t_list *nb = lst->next;
         free(lst->data);
         free(lst);
         lst = nb;
     }
 }
-
+void print_list(t_list *head, void (*print)(void *))
+{
+	printf("[");
+	for (t_list *p = head; p; p = p->next) {
+		if (print) print(p->data);
+		else printf("%p", p->data);
+		if (p->next) printf(", ");
+	}
+	printf("]\n");
+}
 
 int main(void)
 {
@@ -117,6 +127,14 @@ int main(void)
 	printf("Test 2 : Singleton\n");
 	head = ft_list_new(box_int(42));
 	size = ft_list_size(head);
+	printf("List size = %d\n", size);
+
+	printf("Test 3 : Push Front de 3 elements\n");
+	ft_list_push_front(&head, box_int(-7));
+	ft_list_push_front(&head, box_int(-42));
+	ft_list_push_front(&head, box_int(125));
+	size = ft_list_size(head);
+	print_list(head, print_int);
 	printf("List size = %d\n", size);
 
 	return 0;
