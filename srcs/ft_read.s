@@ -1,14 +1,14 @@
 bits 64
 section .text
-global _ft_read
+global ft_read
 extern __errno_location
-_ft_read:
+ft_read:
 	mov rax, 0
 	syscall
 	cmp rax, 0
-	jl _error
+	jl .error
 	ret
-_error:
+.error:
 	neg rax
 	mov rdx, rax
 	call __errno_location

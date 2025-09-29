@@ -1,27 +1,27 @@
 bits 64
 section .text
-global _ft_strcmp
-_ft_strcmp:
+global ft_strcmp
+ft_strcmp:
     mov r8, 0
-_loop:
+.loop:
     mov cl, byte[rsi + r8]
     mov dl, byte[rdi + r8]
     inc r8
     cmp cl, dl
-    jg _exit_minus
-    jl _exit_plus
+    jg .exit_minus
+    jl .exit_plus
     cmp cl, 0x0
-    jz _exit
+    jz .exit
     cmp dl, 0x0
-    jz _exit_plus
+    jz .exit_plus
     cmp cl, dl
-    je _loop
-_exit:
+    je .loop
+.exit:
     mov rax, 0
     ret
-_exit_minus:
+.exit_minus:
     mov rax, -1
     ret
-_exit_plus:
+.exit_plus:
     mov rax, 1
     ret

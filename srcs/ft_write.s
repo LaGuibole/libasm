@@ -1,15 +1,15 @@
 bits 64
 section .text
-global _ft_write
+global ft_write
 
 extern __errno_location
-_ft_write: 
+ft_write:
 	mov rax, 1
 	syscall
 	cmp rax, 0
-	jl _error
+	jl .error
 	ret
-_error:
+.error:
 	neg rax
 	mov rdx, rax
 	call __errno_location

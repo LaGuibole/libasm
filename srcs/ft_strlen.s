@@ -1,13 +1,13 @@
 bits 64
 section .text
-global _ft_strlen
+global ft_strlen
 
-_ft_strlen:
+ft_strlen:
 	mov rax, 0 ; init rax registre accumulateur a zero
-_loop:
+.loop:
 	cmp byte[rdi + rax], 0x0 ; comparer rdi (argument de la fonction) a rax (valeur de retour)
-	jz _exit ; si cmp egal a zero jump a exit
+	jz .exit ; si cmp egal a zero jump a exit
 	inc rax ; sinon on incremente rax jusqu'au \0
-	jmp _loop ; jump au debut de la loop
-_exit:
+	jmp .loop ; jump au debut de la loop
+.exit:
 	ret

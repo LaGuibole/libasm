@@ -1,195 +1,139 @@
 bits 64
 
 section .text
-global _ft_atoi_base
-extern _ft_strlen
-extern _ft_putstr
-extern _ft_strchr
-extern printf
-
+global ft_atoi_base
+extern ft_strlen
+extern ft_putstr
+extern ft_strchr
 
 ; ---------- PRINCIPE STACK -------
-; Pour l'ABI SysV (x86_64) pour chaque call ou syscall => rsp % 16 = 0
-; Certains call font des instructions movapps qui exige que les adresses soit alignees de 16 octets
-; pourquoi 16 ? => pcq le call  a deja pousse l'adresse de retour (8 octets / bits)
-; c'est pour ca qu'on sub allouer espace fictif, puis add, pour rendre l'espace fictif qu'on prend
+; ABI SysV x86_64 : a chaque call, rsp doit etre aligne sur 16 octets
+; (le call pousse l’adresse de retour, 8 octets, donc on compense si besoin).
+; Ici on ne joue pas avec l’alignement explicitement, on se contente de
+; preserver les callee-saved et on rend ce qu’on a pris. Mais c'est ici que je ;e suis penche sur le sujet
 
 ; ----------- MAPPING ----------
-; rdi = str, rsi = base
-; r12 = base (calle-saved)
-; r13 = str (callee-saved)
-; r14d = base_len
-; r8d = minus_count % 2
-; r9d any_digit flag (0/1)
-; rax = accumulateur
+; rdi = str (argument 1)
+; rsi = base (argument 2)
+; r12 = base (sauvegarde, callee-saved)
+; r13 = str  (sauvegarde, callee-saved)
+; r14d = base_len (en 32 bits, pratique pour comparaisons)
+; r8d  = compteur de '-' modulo 2 (si bit 0 == 1 => resultat negatif)
+; r9d  = any_digit flag (0/1) pour savoir si au moins un digit a ete lu
+; rax  = accumulateur (résultat en construction)
 
-
-_ft_atoi_base:
-    push r12 ; save callee-saved pour les pointeurs 
-    push r13 ; same
+ft_atoi_base:
+    push r12                ; on garde r12/r13/r14 au chaud (callee-saved)
+    push r13
     push r14
 
-    mov r13, rdi ; str
-    mov r12, rsi ; base
+    mov r13, rdi            ; r13 = str (on fige le pointeur d’entree)
+    mov r12, rsi            ; r12 = base (on fige la base)
 ; --------- validation de la longueur de la base -----------
-    mov rdi, r12 ; on passe la base pour strlen
-    call _ft_strlen
-    cmp rax, 2
-    jb _ret_zero ; si len < 2
-    mov r14d, eax ; base_len stockee pour conversion
-    ; DEBUG: affiche la valeur de r14d (base_len)
-    mov rsi, r14
-    mov rdi, debug_base_fmt
-    mov rax, 0
-    call printf
+    mov rdi, r12            ; strlen(base)
+    call ft_strlen
+    cmp rax, 2              ; base_len < 2 => base invalide
+    jb .ret_zero
+    mov r14d, eax           ; r14d = base_len (stocke pour la suite)
 ; ---------- validation de la base -------------------------
-    mov rdx, r12 ; rdx = iterateur pour la base
-_validate_loop:
-    mov al, [rdx]
-    test al, al
-    jz _base_ok
-    ; check espaces dans la base
-    cmp al, 32
-    je _ret_zero
-    cmp al, 9
-    jb _check_pm
-    cmp al, 13
-    jbe _ret_zero
-_check_pm:
-    cmp al, 43 ; = '+'
-    je _ret_zero
-    cmp al, 45 ; = '-'
-    je _ret_zero
-    ; check des doublons dans la base
-    mov rdi, rdx
-    inc rdi
-    movzx rsi, al 
-    call _ft_strchr
-    test rax, rax
-    jnz _ret_zero
-    inc rdx
-    jmp _validate_loop
-_base_ok:
+    mov rdx, r12            ; rdx = iterateur sur les caracteres de la base
+.validate_loop:
+    mov al, [rdx]           ; al = base[i]
+    test al, al             ; fin de chaine ?
+    jz .base_ok
+    ; check espaces dans la base (interdits)
+    cmp al, 32              ; ' '
+    je .ret_zero
+    cmp al, 9               ; tabulation horizontale
+    jb .check_pm
+    cmp al, 13              ; jusqu’à CR inclus (9..13)
+    jbe .ret_zero
+.check_pm:
+    cmp al, 43              ; '+'
+    je .ret_zero
+    cmp al, 45              ; '-'
+    je .ret_zero
+    ; check des doublons dans la base avec strchr(base+i+1, base[i])
+    mov rdi, rdx            ; rdi = &base[i]
+    inc rdi                 ; rdi = &base[i+1]
+    movzx rsi, al           ; rsi = caractere recherche
+    call ft_strchr
+    test rax, rax           ; si trouve => doublon => invalide
+    jnz .ret_zero
+    inc rdx                 ; i++
+    jmp .validate_loop
+.base_ok:
 ; ------------------- skip des espaces dans l'arg ---------
-_skip_ws:
-    mov al, [r13]
-    test al, al
-    jz _after_sign
-    cmp al, 32
-    je _bump_ws
-    cmp al, 9
-    jb _after_sign
-    cmp al, 13
-    jbe _bump_ws
-    jmp _after_sign
-_bump_ws:
-    inc r13
-    jmp _skip_ws
+.skip_ws:
+    mov al, [r13]           ; al = *str
+    test al, al             ; fin de chaine ? => on sort
+    jz .after_sign
+    cmp al, 32              ; ' '
+    je .bump_ws
+    cmp al, 9               ; < 9 => pas un espace controlable => stop
+    jb .after_sign
+    cmp al, 13              ; 9..13 => whitespace => skip
+    jbe .bump_ws
+    jmp .after_sign
+.bump_ws:
+    inc r13                 ; str++
+    jmp .skip_ws
 ; --------------- evaluer les signes - et + --------------
-_after_sign:
-    xor r8d, r8d
-_sign_loop:
-    mov al, [r13]
-    cmp al, 43 ; = '+'
-    je _bump_sign
-    cmp al, 45 ; = '-'
-    jne _convert_start
-    inc r8d ; compte les '-'
-_bump_sign:
-    inc r13;
-    jmp _sign_loop
-; ------------------- conversion (bientot la fiiiiiin) ------- 
-; _convert_start:
-;     xor eax, eax ; registre accumulateur (acc = 0)
-;     xor r9d, r9d ; any_digit = 0
-; _convert_loop:
-;     movzx edx, byte[r13]
-;     test dl, dl
-;     jz _convert_end
-;     ; chercher le char dans la base => digit = index
-;     mov rdi, r12
-;     mov rsi, rdx
-;     ; sub rsp, 8
-;     call _ft_strchr
-;     ; add rsp, 8
-;     test rax, rax
-;     jz _convert_end ; digit non trouve dans la base
-;     ; digit = rax - r12
-;     mov rdx, rax
-;     sub rdx, r12 ; rdx = index(digit)
-;     ; acc = acc * base_len + digit
-;     imul rax, r14
-;     add rax, rdx
-;     inc r13
-;     mov r9d, 1 ; au moins un digit lu
-;     jmp _convert_loop
-; _convert_end:
-;     test r9d, r9d
-;     jz _ret_zero ; auncun digit => 0
-;     ; appliquer le signe
-;     test r8d, 1
-;     jz _ret_ok
-;     neg rax
-;     jmp _ret_ok
-_convert_start:
-    xor eax, eax ; registre accumulateur (acc = 0)
-    xor r9d, r9d ; any_digit = 0
-_convert_loop:
-    movzx edx, byte[r13]
-    test dl, dl
-    jz _convert_end
-    xor rcx, rcx              ; index = 0
+.after_sign:
+    xor r8d, r8d            ; r8d = 0 (compteur de '-')
+.sign_loop:
+    mov al, [r13]           ; al = *str
+    cmp al, 43              ; '+'
+    je .bump_sign
+    cmp al, 45              ; '-'
+    jne .convert_start
+    inc r8d                 ; on compte les '-' (parite => signe)
+.bump_sign:
+    inc r13                 ; str++ et on continue a scanner les signes
+    jmp .sign_loop
+; ------------------- conversion (bientot la fiiiiiin) -------
+.convert_start:
+    xor eax, eax            ; acc = 0 (rax construit le resultat)
+    xor r9d, r9d            ; any_digit = 0 (pas encore lu de digit)
+.convert_loop:
+    movzx edx, byte[r13]    ; dl = *str (char courant)
+    test dl, dl             ; fin de chaine ?
+    jz .convert_end
+    xor rcx, rcx            ; rcx = index du digit dans base (0..base_len-1)
+    xor r10, r10            ; r10 utilise pour charger base[rcx]
 .find_digit_loop:
-    cmp rcx, r14              ; si index >= base_len, pas trouvé
-    jge _convert_end
-    mov al, [r12 + rcx]       ; caractère courant de la base
-    cmp dl, al                ; dl = caractère à convertir
+    cmp rcx, r14            ; si rcx >= base_len => char pas dans base
+    jge .convert_end
+    mov r10b, BYTE [r12 + rcx] ; r10b = base[rcx]
+    cmp dl, r10b            ; *str == base[rcx] ?
     je .digit_found
-    inc rcx
+    inc rcx                 ; sinon on teste le suivant
     jmp .find_digit_loop
 .digit_found:
-    mov rbx, rax        ; sauvegarde l'accumulateur
-    mov r15, r14        ; copie base_len dans r15 (r15 non utilisé)
-    imul rbx, r15       ; acc * base_len
-    add rbx, rcx        ; + index
-    mov rax, rbx        ; rax = nouvel accumulateur
-
-    ; DEBUG: affiche la valeur courante de rax
-    push rax
-    mov rdi, debug_fmt
-    mov rsi, rax
-    mov rax, 0
-    call printf
-    pop rax
-
-    inc r13
-    mov r9d, 1
-    jmp _convert_loop
-_convert_end:
-    test r9d, r9d
-    jz _ret_zero ; auncun digit => 0
-    ; appliquer le signe
-    test r8d, 1
-    jz _ret_ok
-    neg rax
-    jmp _ret_ok
-
+    mov rbx, rax            ; rbx = acc (sauvegarde)
+    mov r15, r14            ; r15 = base_len (copie, registre libre ici)
+    imul rbx, r15           ; rbx = acc * base_len
+    add rbx, rcx            ; rbx += index (valeur du digit)
+    mov rax, rbx            ; acc = nouveau total
+    inc r13                 ; str++ (on consomme le char converti)
+    mov r9d, 1              ; any_digit = 1 (au moins un digit valide lu)
+    jmp .convert_loop
+.convert_end:
+    test r9d, r9d           ; aucun digit valide lu ?
+    jz .ret_zero            ; => retourne 0
+    ; appliquer le signe apres la boucle
+    test r8d, 1             ; parite du nombre de '-'
+    jz .ret_ok              ; pair => positif, impair => négatif
+    neg rax                 ; rax = -rax
+    jmp .ret_ok
 ; --------------- sorties --------------------------
-_invalid_early:
-_invalid_late:
-_ret_zero:
-    xor rax, rax
-_ret_ok:
-    pop r14
+.invalid_early:
+.invalid_late:
+.ret_zero:
+    xor rax, rax            ; rax = 0
+.ret_ok:
+    pop r14                 ; on rend les callee-saved dans l’ordre inverse
     pop r13
     pop r12
     ret
 
-section .data
-debug_base_fmt: db "[DEBUG] base_len = %d\n", 0
-BaseIsValid:    db 'Base Is Valid ', 0
-InvalidBaseString:  db 'Invalid Base ', 0
-ExitSuccess:    db 'Skip Spaces ', 0
-SignIsMinus:    db 'Sign is = - ', 0
-SignIsPlus:     db 'Sign is = + ', 0
-debug_fmt: db "[DEBUG] rax = %ld\n", 0
